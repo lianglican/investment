@@ -12,10 +12,15 @@ bank_stock = ['无锡银行', '紫金银行', '张家港行', '中信银行', '�
 			  '长沙银行', '民生银行', '南京银行', '北京银行', '兴业银行', '上海银行', '建设银行', '农业银行', 
 			  '成都银行', '邮政银行', '工商银行', '平安银行', '宁波银行', '杭州银行']
 
+cb_dict = {"宝莱转债":102, "乐歌转债":120, "银河转债":123, "溢利转债":185, "正元转债":120, "金农转债":120, "联得转债":110,
+		   "模塑转债":160, "凯发转债":118, "新天转债":115, "尚荣转债":120, "万顺转债":113, "久吾转债":110, "英联转债":120,
+		   "通光转债":170, "东时转债":120, "智能转债":103, "飞鹿转债":118, "雷迪转债":105, "今飞转债":102, "哈尔转债":101}
+
 dl_cblist  = [] # 双低
 lpp_cblist = [] # 低溢价
 lp_cblist  = [] # 低价
 banks_list = [] # 银行
+low_scale_list = [] # 低规模
 
 for i in js['rows']:
 	# 银行转债达到下修条件时,一定会下修到底
@@ -30,6 +35,19 @@ for i in js['rows']:
 		and float(i['cell']['price']) < float(i['cell']['redeem_price']):
 		tmp=['现价:',round(float(i['cell']['price']),1), i['cell']['bond_nm'], '债券代码:'+i['id'], '溢价率:'+i['cell']['premium_rt'], '转股价值:'+i['cell']['convert_value']]
 		banks_list.append(tmp)
+
+	# 剩余规模小于3亿
+	# 未强赎
+	# 转股价值小于130
+	# 低于指定价格
+	if i['cell']['price_tips'] != '待上市'\
+		and i['cell']['btype'] == 'C'\
+		and i['cell']['redeem_dt'] == None\
+		and float(i['cell']['convert_value']) < 130 \
+		and i['cell']['bond_nm'] in cb_dict\
+		and float(i['cell']['price']) < cb_dict[i['cell']['bond_nm']]:
+		tmp=[i['cell']['bond_nm'], '债券代码:'+i['id'], '现价:'+i['cell']['price'], '建仓价:', cb_dict[i['cell']['bond_nm']]]
+		low_scale_list.append(tmp)
 
 	#攻守兼备:双低筛选规则
 	# 1.PB > 1 
@@ -95,6 +113,14 @@ print('防守型：低价格(需自行剔除无法下修转股价格的标)')
 Num = 0
 lp_cblist.sort()
 for i in lp_cblist[0:10]:
+	Num += 1
+	print('No.%02d %s'% (Num, i))
+
+print('--------------------------------')
+print('妖债潜伏')
+Num = 0
+low_scale_list.sort()
+for i in low_scale_list:
 	Num += 1
 	print('No.%02d %s'% (Num, i))
 
