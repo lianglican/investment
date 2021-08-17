@@ -1,5 +1,47 @@
+
+import execjs
 import requests
 import json
+import time
+
+import  http.cookiejar
+from http.cookiejar import LWPCookieJar
+
+with open("./jsl.js", encoding="utf8") as f:
+	js_src = f.read()
+
+jsctx = execjs.compile(js_src)
+encode_user = jsctx.call('jslencode', "18816793289", "397151C04723421F")
+encode_password = jsctx.call('jslencode', "asdf1234,.", "397151C04723421F")
+# print(encode_user)
+# print(encode_password)
+
+session = requests.session()
+session.cookies = LWPCookieJar("jsl_ck.txt")
+
+data = {
+	"_post_type" : "ajax",
+	"aes" : 1,
+	"user_name" : encode_user,
+	"password" : encode_password,
+}
+login_response = session.post("https://www.jisilu.cn/account/ajax/login_process/", data=data)
+# print(login_response.text)
+# print(session.cookies)
+#session.cookies.save() 
+
+#session.cookies.load(ignore_discard=True)
+cur_time = int(round(time.time()*1000))
+url = "https://www.jisilu.cn/data/cbnew/cb_list/?___jsl=LST___t=" + str(cur_time)
+#print(url)
+#response = requests.get(url, cookies=cookie)
+response = session.get(url)
+content = response.content
+#print(type(content)) 
+
+ 
+data = response.json()
+
 
 url = 'https://www.jisilu.cn/data/cbnew/cb_list/?___jsl=LST___'
 
@@ -22,7 +64,7 @@ lp_cblist  = [] # 低价
 banks_list = [] # 银行
 low_scale_list = [] # 低规模
 
-for i in js['rows']:
+for i in data['rows']:
 	# 银行转债达到下修条件时,一定会下修到底
 	# 转股价值低于85
 	# PB>0.7
@@ -35,18 +77,20 @@ for i in js['rows']:
 		and float(i['cell']['price']) < float(i['cell']['redeem_price']):
 		tmp=['现价:',round(float(i['cell']['price']),1), i['cell']['bond_nm'], '债券代码:'+i['id'], '溢价率:'+i['cell']['premium_rt'], '转股价值:'+i['cell']['convert_value']]
 		banks_list.append(tmp)
+		#print(i)
 
+	# 妖债：
 	# 剩余规模小于3亿
 	# 未强赎
 	# 转股价值小于130
-	# 低于指定价格
+	# 低于指定价格 或 成交额低于2000万
 	if i['cell']['price_tips'] != '待上市'\
 		and i['cell']['btype'] == 'C'\
 		and i['cell']['redeem_dt'] == None\
 		and float(i['cell']['convert_value']) < 130 \
 		and i['cell']['bond_nm'] in cb_dict\
-		and float(i['cell']['price']) < cb_dict[i['cell']['bond_nm']]:
-		tmp=[i['cell']['bond_nm'], '债券代码:'+i['id'], '现价:'+i['cell']['price'], '建仓价:', cb_dict[i['cell']['bond_nm']]]
+		and (float(i['cell']['price']) < cb_dict[i['cell']['bond_nm']] or float(i['cell']['volume']) < 2000) :
+		tmp=[i['cell']['bond_nm'], '债券代码:'+i['id'], '现价:'+i['cell']['price'], '建仓价:', cb_dict[i['cell']['bond_nm']],'成交额(万):', i['cell']['volume']]
 		low_scale_list.append(tmp)
 
 	#攻守兼备:双低筛选规则
@@ -84,19 +128,17 @@ for i in js['rows']:
 	#防守型：低价筛选规则
 	# 1. 未强赎
 	# 2. 有回售
-	# 3. PB > 1, 100 <= 价格 < 105 且溢价率小于15%
-	# 4. PB > 0.8, 90 <= 价格 < 100 且溢价率小于23%
-	# 5. 85 <= 价格 < 90  且溢价率小于25%
-	# 6. 80 <= 价格 < 85  且溢价率小于30%
-	# 7. 价格 < 80        且溢价率小于50%
-	# 8. 评级AA以上，税后年化收益7%以上
+	# 3. PB > 0.8, 90 <= 价格 < 100 且溢价率小于23%
+	# 4. 85 <= 价格 < 90  且溢价率小于25%
+	# 5. 80 <= 价格 < 85  且溢价率小于30%
+	# 6. 价格 < 80        且溢价率小于50%
+	# 7. 评级A以上，税后年化收益7%以上
 		if i['cell']['put_price'] != None\
-			and ( (100 <= float(i['cell']['price']) < 105 and float(i['cell']['premium_rt'].strip('%')) < 15 ) \
-				or (90 <= float(i['cell']['price']) < 100 and float(i['cell']['premium_rt'].strip('%')) < 23) \
+			and ( (90 <= float(i['cell']['price']) < 100 and float(i['cell']['premium_rt'].strip('%')) < 23) \
 				or (85 <= float(i['cell']['price']) < 90 and float(i['cell']['premium_rt'].strip('%')) < 25) \
 				or (80 <= float(i['cell']['price']) < 85 and float(i['cell']['premium_rt'].strip('%')) < 30) \
 				or (float(i['cell']['price']) < 80 and float(i['cell']['premium_rt'].strip('%')) < 50) \
-				or i['cell']['rating_cd'].find("AA") != -1 and i['cell']['ytm_rt'].find("-") == -1 and float(i['cell']['ytm_rt'].strip('%')) > 7):
+				or i['cell']['rating_cd'].find("A") != -1 and i['cell']['ytm_rt'].find("-") == -1 and float(i['cell']['ytm_rt'].strip('%')) > 7):
 			tmp=['现价:',round(float(i['cell']['price']),1), i['cell']['bond_nm'], '债券代码:'+i['id'], '溢价率:'+i['cell']['premium_rt'], '税后收益率:'+i['cell']['ytm_rt']]
 			lp_cblist.append(tmp)
 
